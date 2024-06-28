@@ -1,0 +1,76 @@
+```{r}
+# Load necessary libraries
+library(sparklyr)
+library(dplyr)
+library(forecast)
+library(lubridate)
+```
+Spark Configurations for loading data from CDP Datalake
+```{r}
+
+# Spark configuration
+config <- spark_config()
+config$spark.security.credentials.hiveserver2.enabled <- "false"
+config$spark.datasource.hive.warehouse.read.via.llap <- "false"
+config$spark.sql.hive.hwc.execution.mode <- "spark"
+config$spark.sql.extensions <- "com.qubole.spark.hiveacid.HiveAcidAutoConvertExtension"
+config$spark.kryo.registrator <- "com.qubole.spark.hiveacid.util.HiveAcidKyroRegistrator"
+config$sparklyr.jars.default <- "/opt/spark/optional-lib/hive-warehouse-connector-assembly.jar"
+config$spark.yarn.access.hadoopFileSystems <- "s3a://go01-demo/datalake/warehouse/tablespace/managed/hive"
+
+# Connect to Spark
+sc <- spark_connect(config = config)
+```
+
+Let us get the data from our smaller dataset of 3 years.
+```{r}
+
+s3_path <- file.path(Sys.getenv("DATASET_PATH"),Sys.getenv( "DATASET_SMALL_NAME"))
+
+# Read the dataset from S3 into Spark
+sales_tbl <- spark_read_csv(sc, name = "sales_data", path = s3_path, header = TRUE, infer_schema = TRUE)
+
+# Rename columns to lowercase
+sales_data <- sales_tbl %>%
+  rename_with(tolower)
+
+```
+# let us start our forecasting task
+```{r}
+#start_date <- as.Date(Sys.getenv("FORECAST_WINDOW_START_DATE"), unset="2019-01-01", format="%Y-%m-%d")
+#end_date <- as.Date(Sys.getenv("FORECAST_WINDOW_END_DATE"), unset="2021-12-31")
+start_date <- as.Date("2019-01-01", format="%Y-%m-%d")
+end_date <- as.Date("2019-12-31", format="%Y-%m-%d")
+print(start_date)
+print(end_date)
+```
+
+```{r}
+
+# Perform basic transformations and filter by date range
+sales_data_filtered <- sales_data %>%
+  mutate(date = to_date(date, 'MM/dd/yyyy')) %>%
+  filter(date >= start_date & date <= end_date)
+
+# Function to create forecast for each store and category
+create_forecast <- function(data, column) {
+  data_ts <- ts(data[[column]], frequency = 12, start = c(year(min(data$date)), month(min(data$date))))
+  forecast(auto.arima(data_ts), h = 4 * 3) # Forecast for next 4 quarters
+}
+
+# Apply forecast for each store and category
+forecast_results <- sales_data_filtered %>%
+  group_by(store_number, category) %>%
+  do(sales_forecast = create_forecast(., "sale_dollars"),
+     volume_forecast = create_forecast(., "volume_sold_liters"))
+
+# Save the forecast results and model
+write.csv(forecast_results, file = "output/forecast_results.csv")
+saveRDS(forecast_results, file = "output/forecast_model.rds")
+
+# Disconnect from Spark
+spark_disconnect(sc)
+
+
+```
+

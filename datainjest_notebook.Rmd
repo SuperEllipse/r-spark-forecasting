@@ -128,5 +128,4 @@ spark_write_csv(last_3_years, path = dataset_small_path,  mode = "overwrite")
 ```{r}
 head(aggregated_result)
 ```
-
-Let us now select a 
+  

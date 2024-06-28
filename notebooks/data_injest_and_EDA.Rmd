@@ -105,4 +105,9 @@ Let us save these results as a separate dataset, which we will use for Forecasti
 
 spark_write_csv(last_3_years_data, path = "s3a://go01-demo/data/iowa-liquor-sales/Iowa_Liquor_Sales_3yrs.csv",  mode = "overwrite")
 ```
+Lets us get the columnames
+```{r}
+names(last_3_years_data)
+paste(colnames(last_3_years_data), collapse = ",")
+```
 

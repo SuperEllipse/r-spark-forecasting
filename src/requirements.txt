@@ -1,0 +1,7 @@
+dplyr
+ggplot2
+tidyr
+forecast
+sparklyr
+shiny
+lubridate
