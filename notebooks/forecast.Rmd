@@ -2,8 +2,10 @@
 # Load necessary libraries
 library(sparklyr)
 library(dplyr)
-library(forecast)
 library(lubridate)
+library(purrr)
+library(forecast)
+
 ```
 Spark Configurations for loading data from CDP Datalake
 ```{r}
@@ -34,35 +36,78 @@ sales_tbl <- spark_read_csv(sc, name = "sales_data", path = s3_path, header = TR
 sales_data <- sales_tbl %>%
   rename_with(tolower)
 
+sales_summary <- sales_data %>%
+  group_by(category, category_name, year) %>%
+  summarize(
+    total_sales_dollars = sum(sale_dollars, na.rm = TRUE),
+    total_volume_sold_liters = sum(volume_sold_liters, na.rm = TRUE)
+  ) %>%
+  select(category, category_name, year, total_sales_dollars, total_volume_sold_liters) %>%
+  arrange(desc(year), desc(total_sales_dollars))
+show(sales_summary)
+
+show(sales_summary)
 ```
-# let us start our forecasting task
+# let us start our forecasting task: Since forecasting everything will take a long time , we will just forecast on the Top selling category i.e American Vodkas
+i.e. category=1031100 and category_name = 	American Vodkas and we will year =2022. Just to make sure the forecast completes in time, we use 
+data for 91 days i.e. 01-01-2022 to 31-01-2022 to forecast for the next 2 quarters
 ```{r}
 #start_date <- as.Date(Sys.getenv("FORECAST_WINDOW_START_DATE"), unset="2019-01-01", format="%Y-%m-%d")
 #end_date <- as.Date(Sys.getenv("FORECAST_WINDOW_END_DATE"), unset="2021-12-31")
-start_date <- as.Date("2019-01-01", format="%Y-%m-%d")
-end_date <- as.Date("2019-12-31", format="%Y-%m-%d")
+start_date <- as.Date("2022-01-01", format="%Y-%m-%d")
+end_date <- as.Date("2022-03-31", format="%Y-%m-%d")
 print(start_date)
 print(end_date)
+```
+```{r}
+category_name_filter <- "American Vodkas"
+year_filter <-2022
+
+category_id <- sales_data %>%
+ filter(category_name == category_name_filter) %>%
+ select(category) %>%
+ distinct() %>%
+ collect() %>%
+ pull(category)
+
+
+sales_data_filtered <- sales_data %>%
+ mutate(date = to_date(date, 'MM/dd/yyyy')) %>%
+ filter(date >= start_date & date <= end_date &
+        category_name == category_name_filter &
+        year == year_filter &
+        category == category_id)
+
+# sales_data_filtered <- sales_data %>%
+# filter( category_name == category_name_filter & 
+#         category == category_id)
+# show(sales_data_filtered%>%
+#        arrange(desc(date)))
+
+```
+lets find the number of rows
+```{r}
+count(sales_data_filtered)
+
 ```
 
 ```{r}
 
-# Perform basic transformations and filter by date range
-sales_data_filtered <- sales_data %>%
-  mutate(date = to_date(date, 'MM/dd/yyyy')) %>%
-  filter(date >= start_date & date <= end_date)
 
-# Function to create forecast for each store and category
+# Function to create forecast for each store
 create_forecast <- function(data, column) {
-  data_ts <- ts(data[[column]], frequency = 12, start = c(year(min(data$date)), month(min(data$date))))
-  forecast(auto.arima(data_ts), h = 4 * 3) # Forecast for next 4 quarters
+  ts_data <- ts(data[[column]], frequency = 12, start = c(year(min(data$date)), month(min(data$date))))
+  fit <- auto.arima(ts_data)
+  forecast(fit, h = 4 * 3) # Forecast for next 4 quarters
 }
 
-# Apply forecast for each store and category
-forecast_results <- sales_data_filtered %>%
-  group_by(store_number, category) %>%
-  do(sales_forecast = create_forecast(., "sale_dollars"),
-     volume_forecast = create_forecast(., "volume_sold_liters"))
+# Apply forecast for each store
+sales_forecast <- sales_data_filtered %>%
+  group_by(store_number) %>%
+  nest() %>%
+  mutate(sales_forecast = map(data, ~ create_forecast(.x, "sale_dollars")),
+         volume_forecast = map(data, ~ create_forecast(.x, "volume_sold_liters")))
+
 
 # Save the forecast results and model
 write.csv(forecast_results, file = "output/forecast_results.csv")
@@ -71,6 +116,6 @@ saveRDS(forecast_results, file = "output/forecast_model.rds")
 # Disconnect from Spark
 spark_disconnect(sc)
 
-
+forecast_results
 ```
 
