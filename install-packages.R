@@ -1,0 +1,7 @@
+install.packages("sparklyr")
+install.packages("lubridate")
+install.packages("dplyr")
+install.packages("forecast")
+install.packages("arrow")
+install.packages("DBI")
+install.packages("RSQLite")
