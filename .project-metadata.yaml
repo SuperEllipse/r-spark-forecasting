@@ -1,0 +1,63 @@
+name: Forecasting setup using Sparklyr
+description: "Forecasting setup using Sparklyr"
+author: "Cloudera"
+date: "2024-06-25"
+specification_version: 1.0
+prototype_version: 1.0
+
+runtimes: 
+  - editor: PBJ Workbench
+    kernel: R 4.3
+    edition: Standard
+
+tasks:
+  - type: run_session
+    name: Install Dependencies
+    entity_label: ingest
+    script: ./src/install_packages.R
+    short_summary: Install Dependencies
+    cpu: 2
+    memory: 8
+
+- type: create_job
+    name: Ingest Data
+    entity_label: ingest
+    script: ./src/ingest_data.R
+    short_summary: Ingest Data
+    cpu: 2
+    memory: 8
+    environment:
+      TASK_TYPE: CREATE
+          
+  - type: create_job
+    name: Prepare Data
+    entity_label: transform
+    script: ./src/data_prep.R
+    short_summary: Read and transform sales data
+    cpu: 2
+    memory: 8
+    environment:
+      TASK_TYPE: CREATE
+
+  # - type: create_job
+  #   name: Forecast
+  #   entity_label: Forecast
+  #   script: fc_spark.R
+  #   short_summary: Forecast sales data
+  #   cpu: 2
+  #   memory: 8
+  #   environment:
+  #     TASK_TYPE: CREATE
+
+ # - type: start_application
+ #   name: Deploy r-shiny application 
+#    entity_label: application
+#    script: ./src/shiny_app.R
+#    short_summary: Deploy Shiny Application
+#    subdomain: forecast-dashboard
+#    cpu: 2
+#    memory: 8
+#    environment:
+#      TASK_TYPE: START_APPLICATION
+  
+
